@@ -4,37 +4,40 @@
 #define buadRate 9600
 
 // String constants used for parsing serial commands
-String sequenceCommand = "executeSequence", pathCommand = "executePath";
-String path_angleCommand = "angle", path_angleDirCommand = "dir";
-String path_distanceCommand = "distance", path_speedCommand = "speed";
-String path_substringCommand = "&", path_equalCommand = "=";
+String sequenceCommand = "executeSequence"  , pathCommand = "executePath";
+String path_angleCommand = "angle"          , path_angleDirCommand = "dir";
+String path_distanceCommand = "distance"    , path_speedCommand = "speed";
+String path_substringCommand = "&"          , path_equalCommand = "=";
 
 int pathDetails[3]; // Array to store path parameters (angle, distance, speed)
 
 MPU6050 mpu(Wire); // MPU6050 sensor object for reading IMU data
 
 // Motor control pins
-#define motorL1  7
-#define motorL2  6
-#define motorR1  9
-#define motorR2  8
-#define motorEN1 5
-#define motorEN2 10
-#define sensor 2
+#define motorL1   7
+#define motorL2   6
+#define motorR1   9
+#define motorR2   8
+#define motorEN1  5
+#define motorEN2  10
+#define sensor    2
 
 // Speed settings
-#define speedTurn 80
+#define speedTurn           80
+#define speed_error_factor  11
+#define speed_adjust_factor 10
+
 
 // Shape dimensions and speeds
-#define squareLength 100
-#define squareSpeed  150
+#define squareLength        100
+#define squareSpeed         150
 
-#define triangleLength 100
-#define triangleSpeed  150
+#define triangleLength      100
+#define triangleSpeed       150
 
-#define rectangleLength 100
-#define rectangleWidth 150
-#define rectangleSpeed  150
+#define rectangleLength     100
+#define rectangleWidth      150
+#define rectangleSpeed      150
 
 int steps = 0;  // Tracks the number of steps (encoder counts)
 int distance = 0;  // Distance traveled based on encoder steps
@@ -55,14 +58,12 @@ void setup() {
   pinMode(motorEN1, OUTPUT);
   pinMode(motorEN2, OUTPUT);
   moveForward(); // Start by moving the car forward
-  moveTriangle(triangleLength, triangleSpeed);
 }
 
 void loop() {
   mpu.update(); // Continuously update MPU6050 sensor readings
   yaw = mpu.getAngleZ(); // Get the current yaw angle
   sendData("false", yaw, distance, 0); // Send current data over serial
-
   if (Serial.available()) { 
     // Check if data is available on the serial port
     checkCommand(Serial.readStringUntil('\r')); // Read the command and process it
@@ -88,19 +89,17 @@ void SetCarPath(signed int initial_angle, int path_distance, char speed) {
   // Continue moving until the car reaches the specified distance
   while (distance < path_distance) {
     // Adjust motor speeds based on the current yaw angle
-    analogWrite(motorEN1, speed + (yaw- initial_angle)*10 + 11);
-    analogWrite(motorEN2, speed - (yaw- initial_angle)*10 - 11);
+    analogWrite(motorEN1, speed + (yaw- initial_angle)*speed_adjust_factor + speed_error_factor);
+    analogWrite(motorEN2, speed - (yaw- initial_angle)*speed_adjust_factor - speed_error_factor);
     
     if (digitalRead(sensor)) { // Check if the sensor detects a step
       steps += 1;
       distance = (steps / 90.0) * 100; // Convert steps to distance
       while (digitalRead(sensor)); // Wait for the sensor to clear
     }
-    
     mpu.update(); // Update sensor readings
     yaw = mpu.getAngleZ(); // Update yaw angle
   }
-
   sendData("true", yaw, distance, speed); // Send final status
   instantStop(); // Stop the car
 }
@@ -217,10 +216,11 @@ void checkCommand(String str) {
  * @param speed - The speed at which the car should move.
  */
 void moveSquare(float length, char speed) {
-  SetCarPath(yaw, 1000, speed);
-  SetCarPath(yaw + 90, 1160, speed);
-  SetCarPath(yaw + 90, 1000, speed);
-  turnCar(yaw - 180, speedTurn);
+  SetCarPath(yaw, length, speed);         // Move forward for the first side
+  SetCarPath(yaw - 90, length, speed);    // Turn and move for the second side
+  SetCarPath(yaw - 90, length, speed);    // Turn and move for the third side
+  SetCarPath(yaw - 90, length, speed);    // Turn and move for the last side
+  turnCar(yaw - 180, speedTurn);          // Final turn to complete the square
 }
 
 /**
@@ -230,9 +230,9 @@ void moveSquare(float length, char speed) {
  * @param speed - The speed at which the car should move.
  */
 void moveTriangle(float length, char speed) {
-  SetCarPath(yaw, 1000, speed);         // Move forward for the first side
-  SetCarPath(yaw - 90, 1160, speed);   // Turn and move for the second side
-  SetCarPath(yaw - 90, 1000, speed);   // Turn and move for the third side
+  SetCarPath(yaw, length, speed);         // Move forward for the first side
+  SetCarPath(yaw - 120, length, speed);    // Turn and move for the second side
+  SetCarPath(yaw - 120, length, speed);    // Turn and move for the third side
   turnCar(yaw - 180, speedTurn);          // Final turn to complete the triangle
 }
 
@@ -244,11 +244,11 @@ void moveTriangle(float length, char speed) {
  * @param speed - The speed at which the car should move.
  */
 void moveRectangle(float length, float width, char speed) {
-  SetCarPath(yaw, length, speed);        // Move forward for the first side (length)
-  SetCarPath(yaw - 90, width, speed);    // Turn and move for the second side (width)
-  SetCarPath(yaw - 90, length, speed);   // Turn and move for the third side (length)
-  SetCarPath(yaw - 90, width, speed);    // Turn and move for the fourth side (width)
-  turnCar(yaw - 90, speedTurn);          // Final turn to complete the rectangle
+  SetCarPath(yaw, length, speed);         // Move forward for the first side (length)
+  SetCarPath(yaw - 90, width, speed);     // Turn and move for the second side (width)
+  SetCarPath(yaw - 90, length, speed);    // Turn and move for the third side (length)
+  SetCarPath(yaw - 90, width, speed);     // Turn and move for the fourth side (width)
+  turnCar(yaw - 90, speedTurn);           // Final turn to complete the rectangle
 }
 
 /**
